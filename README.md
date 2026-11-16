@@ -30,8 +30,8 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 - **RSS Feed**: Subscribe to your search results with any RSS reader
 - **Telegram Integration**: Receive notifications directly in Telegram, with photos, buy buttons, inline query management,
   quiet hours and diagnostics
-- **Browser Session (Patchright)**: The Vinted cookies are obtained with a real Chromium browser and reused for the API
-  calls, which makes the scraping much more reliable
+- **Browser Session (Patchright)**: The search results are read with a real Chromium browser (the JSON API is blocked
+  by Vinted), which makes the scraping work again
 - **Reliable delivery**: notifications are stored in the database and retried, so a restart never loses an item
 
 ---
@@ -227,9 +227,24 @@ The cookies of Vinted are obtained with
 used by the scraper process; the resulting cookies, User-Agent and proxy are shared with the other processes through the
 database.
 
-- **essential** mode (default): the browser only produces the cookies, the API calls stay plain HTTP requests.
-- **full** mode: the API calls are performed from inside the browser context, which is slower but harder to block. It is
-  also used automatically as a fallback when the plain requests are rejected.
+The JSON API (`/api/v2/catalog/items`) is blocked by Vinted and the catalog is rendered server side, so the scraper
+works in two steps:
+
+1. it tries the JSON API (fast, and still used when Vinted serves it again);
+2. if the request fails, it renders the search page in the browser and reads the items from the DOM
+   (`browser_session.search_items`).
+
+`browser_mode` only affects step 1: **essential** (default) uses plain HTTP requests for the API, **full** performs them
+from inside the browser context.
+
+Things to know about the DOM fallback:
+
+- The creation timestamp is not exposed by the page: the first time an item is seen is used instead, and duplicates are
+  filtered by item id.
+- The seller country is not exposed either, so the country allowlist can only filter sellers that are already in the
+  `users` cache (the rest is allowed).
+- Rendering a search page is heavier than an API call: keep `query_refresh_delay` at 120 seconds or more, especially with
+  several queries.
 
 The session is renewed every `browser_ttl` seconds and whenever a 401/403/429 is received, from the Telegram command
 `/refresh_session` or from the Configuration page.

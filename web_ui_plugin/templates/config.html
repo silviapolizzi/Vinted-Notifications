@@ -36,6 +36,15 @@
                                         </div>
                                         <div class="col-md-6">
                                             <div class="mb-3">
+                                                <label for="web_ui_port" class="form-label">Web UI Port</label>
+                                                <input type="number" class="form-control" id="web_ui_port"
+                                                       name="web_ui_port" value="{{ params.web_ui_port }}">
+                                                <small class="form-text text-muted">Restart the application after
+                                                    changing it. In Docker change only the host port mapping.</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
                                                 <label for="query_refresh_delay" class="form-label">Query Refresh Delay
                                                     (seconds)</label>
                                                 <input type="number" class="form-control" id="query_refresh_delay"
@@ -106,6 +115,50 @@
                                                name="telegram_chat_id" value="{{ params.telegram_chat_id }}">
                                         <small class="form-text text-muted">The chat ID where notifications will be
                                             sent</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            {% if params.send_photo == 'True' %}
+                                            <input class="form-check-input" type="checkbox" id="send_photo"
+                                                   name="send_photo" checked>
+                                            {% else %}
+                                            <input class="form-check-input" type="checkbox" id="send_photo"
+                                                   name="send_photo">
+                                            {% endif %}
+                                            <label class="form-check-label" for="send_photo">
+                                                Send the item photo
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            {% if params.show_buy_button == 'True' %}
+                                            <input class="form-check-input" type="checkbox" id="show_buy_button"
+                                                   name="show_buy_button" checked>
+                                            {% else %}
+                                            <input class="form-check-input" type="checkbox" id="show_buy_button"
+                                                   name="show_buy_button">
+                                            {% endif %}
+                                            <label class="form-check-label" for="show_buy_button">
+                                                Add a "Buy" button
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="caption_template" class="form-label">Photo Caption Template</label>
+                                        <textarea class="form-control" id="caption_template"
+                                                  name="caption_template"
+                                                  rows="3">{{ params.caption_template }}</textarea>
+                                        <small class="form-text text-muted">Used as the caption when the photo is
+                                            sent. Variables: {title}, {price}, {brand}</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="quiet_hours" class="form-label">Quiet Hours</label>
+                                        <input type="text" class="form-control" id="quiet_hours"
+                                               name="quiet_hours" value="{{ params.quiet_hours }}"
+                                               placeholder="23:00-07:00">
+                                        <small class="form-text text-muted">Notifications are queued during this
+                                            window. Leave empty to disable</small>
                                     </div>
                                 </div>
                             </div>
@@ -201,6 +254,111 @@
                         <div class="col-md-12">
                             <div class="card h-100">
                                 <div class="card-header d-flex align-items-center">
+                                    <i class="bi bi-browser-chrome me-2 text-info"></i>
+                                    <h5 class="card-title mb-0">Browser Session (Patchright)</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <div class="form-check form-switch">
+                                                    {% if params.browser_enabled == 'True' %}
+                                                    <input class="form-check-input" type="checkbox" id="browser_enabled"
+                                                           name="browser_enabled" checked>
+                                                    {% else %}
+                                                    <input class="form-check-input" type="checkbox" id="browser_enabled"
+                                                           name="browser_enabled">
+                                                    {% endif %}
+                                                    <label class="form-check-label" for="browser_enabled">
+                                                        Use Patchright
+                                                    </label>
+                                                    <small class="form-text text-muted d-block">Obtain the Vinted
+                                                        cookies with a real browser and reuse them for the API
+                                                        calls</small>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="browser_mode" class="form-label">Mode</label>
+                                                <select class="form-select" id="browser_mode" name="browser_mode">
+                                                    <option value="essential"
+                                                            {% if params.browser_mode != 'full' %}selected{% endif %}>
+                                                        essential (cookies only)
+                                                    </option>
+                                                    <option value="full"
+                                                            {% if params.browser_mode == 'full' %}selected{% endif %}>
+                                                        full (API calls through the browser)
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="browser_ttl" class="form-label">Session TTL (seconds)</label>
+                                                <input type="number" class="form-control" id="browser_ttl"
+                                                       name="browser_ttl" value="{{ params.browser_ttl }}">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="browser_channel" class="form-label">Channel</label>
+                                                <input type="text" class="form-control" id="browser_channel"
+                                                       name="browser_channel" value="{{ params.browser_channel }}"
+                                                       placeholder="empty = bundled chromium">
+                                                <small class="form-text text-muted">Use "chrome" to drive a real
+                                                    Google Chrome installation</small>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="browser_user_data_dir" class="form-label">Profile
+                                                    Directory</label>
+                                                <input type="text" class="form-control"
+                                                       id="browser_user_data_dir" name="browser_user_data_dir"
+                                                       value="{{ params.browser_user_data_dir }}">
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="form-check form-switch">
+                                                    {% if params.browser_headless == 'True' %}
+                                                    <input class="form-check-input" type="checkbox"
+                                                           id="browser_headless" name="browser_headless" checked>
+                                                    {% else %}
+                                                    <input class="form-check-input" type="checkbox"
+                                                           id="browser_headless" name="browser_headless">
+                                                    {% endif %}
+                                                    <label class="form-check-label" for="browser_headless">
+                                                        Headless
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="form-check form-switch">
+                                                    {% if params.browser_no_sandbox == 'True' %}
+                                                    <input class="form-check-input" type="checkbox"
+                                                           id="browser_no_sandbox" name="browser_no_sandbox" checked>
+                                                    {% else %}
+                                                    <input class="form-check-input" type="checkbox"
+                                                           id="browser_no_sandbox" name="browser_no_sandbox">
+                                                    {% endif %}
+                                                    <label class="form-check-label" for="browser_no_sandbox">
+                                                        Disable the browser sandbox
+                                                    </label>
+                                                    <small class="form-text text-muted d-block">Required in most
+                                                        Docker setups</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-muted small">
+                                        Status: <strong>{{ params.browser_status }}</strong>
+                                        {% if params.browser_last_error %}
+                                        - last error: {{ params.browser_last_error }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="card h-100">
+                                <div class="card-header d-flex align-items-center">
                                     <i class="bi bi-gear-wide-connected me-2 text-info"></i>
                                     <h5 class="card-title mb-0">Advanced Settings</h5>
                                 </div>
@@ -244,6 +402,9 @@
                     <div class="row">
                         <div class="col-md-12">
                             <button type="submit" class="btn btn-primary">Save Configuration</button>
+                            <button type="submit" class="btn btn-outline-secondary"
+                                    formaction="/refresh_browser_session" formmethod="post"
+                                    formnovalidate>Refresh Browser Session</button>
                         </div>
                     </div>
                 </form>

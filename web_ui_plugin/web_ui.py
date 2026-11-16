@@ -117,7 +117,7 @@ def index():
             ),
             "query": last_item[5],
             "photo_url": last_item[6],
-            "url": f"{urlparse(last_item[5]).scheme}://{urlparse(last_item[5]).netloc}/items/{last_item[0]}"
+            "url": f"{urlparse(last_item[5]).scheme}://{urlparse(last_item[5]).netloc}/items/{last_item[0]}",
         }
     else:
         stats["last_item"] = None
@@ -259,9 +259,15 @@ def items():
                 # Ugly Ugly Ugly very Ugly eeew but I have to do a proper migration of existing db later else it'll break
                 # Eeew bad me >:c
                 "query": (
-                    item[7] if item[7] else parse_qs(urlparse(item[5]).query).get("search_text", [None])[0]
-                    if parse_qs(urlparse(item[5]).query).get("search_text", [None])[0]
-                    else item[5]
+                    item[7]
+                    if item[7]
+                    else (
+                        parse_qs(urlparse(item[5]).query).get("search_text", [None])[0]
+                        if parse_qs(urlparse(item[5]).query).get("search_text", [None])[
+                            0
+                        ]
+                        else item[5]
+                    )
                 ),
                 "url": f"{urlparse(item[5]).scheme}://{urlparse(item[5]).netloc}/items/{item[0]}",
                 "photo_url": item[6],
@@ -317,6 +323,7 @@ def update_config():
     db.set_parameter("rss_max_items", request.form.get("rss_max_items", "100"))
 
     # Update System parameters
+    db.set_parameter("web_ui_port", request.form.get("web_ui_port", "8000"))
     db.set_parameter("items_per_query", request.form.get("items_per_query", "20"))
     db.set_parameter(
         "query_refresh_delay", request.form.get("query_refresh_delay", "60")
@@ -334,11 +341,38 @@ def update_config():
     db.set_parameter("user_agents", request.form.get("user_agents", "[]"))
     db.set_parameter("default_headers", request.form.get("default_headers", "{}"))
 
+    # Update notification parameters
+    db.set_parameter("send_photo", str("send_photo" in request.form))
+    db.set_parameter("show_buy_button", str("show_buy_button" in request.form))
+    db.set_parameter("caption_template", request.form.get("caption_template", ""))
+    db.set_parameter("quiet_hours", request.form.get("quiet_hours", "").strip())
+
+    # Update browser (Patchright) parameters
+    db.set_parameter("browser_enabled", str("browser_enabled" in request.form))
+    db.set_parameter("browser_mode", request.form.get("browser_mode", "essential"))
+    db.set_parameter("browser_headless", str("browser_headless" in request.form))
+    db.set_parameter("browser_no_sandbox", str("browser_no_sandbox" in request.form))
+    db.set_parameter("browser_channel", request.form.get("browser_channel", "").strip())
+    db.set_parameter("browser_ttl", request.form.get("browser_ttl", "1800"))
+    db.set_parameter(
+        "browser_user_data_dir",
+        request.form.get("browser_user_data_dir", "./data/browser_profile"),
+    )
+
     # Reset proxy cache to force refresh on next use
     db.set_parameter("last_proxy_check_time", "1")
     logger.info("Proxy settings updated, cache reset")
 
     flash("Configuration updated", "success")
+    return redirect(url_for("config"))
+
+
+@app.route("/refresh_browser_session", methods=["POST"])
+def refresh_browser_session():
+    """Ask the scraper process to renew the Vinted browser session."""
+    db.set_parameter("browser_refresh_requested", "True")
+    db.set_parameter("browser_retry_after", "0")
+    flash("Browser session refresh requested", "success")
     return redirect(url_for("config"))
 
 
@@ -537,7 +571,13 @@ def api_logs():
 def web_ui_process():
     logger.info("Web UI process started")
     try:
-        app.run(host="0.0.0.0", port=8000, debug=False)
+        port = int(db.get_parameter("web_ui_port") or 8000)
+    except ValueError:
+        logger.warning("Invalid web_ui_port, falling back to 8000")
+        port = 8000
+    try:
+        logger.info(f"Web UI listening on port {port}")
+        app.run(host="0.0.0.0", port=port, debug=False)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Web UI process stopped")
     except Exception as e:

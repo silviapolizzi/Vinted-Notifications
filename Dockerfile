@@ -12,6 +12,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends gosu \
  && rm -rf /var/lib/apt/lists/*
 
+# Patchright downloads its Chromium build here
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 # Create runtime user/group and app dirs (inside image)
 RUN groupadd -g ${APP_GID} ${APP_USER} \
  && useradd -u ${APP_UID} -g ${APP_GID} -M ${APP_USER} \
@@ -19,7 +22,9 @@ RUN groupadd -g ${APP_GID} ${APP_USER} \
 
 # Copy requirements first for better caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+ && patchright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
 
 # Copy the rest of the application
 COPY . .
@@ -27,6 +32,9 @@ COPY . .
 # EntryPoint script (added below)
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Chromium needs a writable HOME for its cache/Crashpad files
+ENV HOME=/tmp
 
 # Expose ports
 EXPOSE 8000

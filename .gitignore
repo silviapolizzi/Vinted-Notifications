@@ -1,6 +1,8 @@
-
 /.idea
-vinted.db
-/__pycache__
+/.venv
+/data
 /logs/vinted.log
 /vinted_notifications.db
+vinted.db
+__pycache__/
+*.pyc

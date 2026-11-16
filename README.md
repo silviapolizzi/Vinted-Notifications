@@ -28,7 +28,11 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 - **Multiple Search Queries**: Monitor multiple search terms simultaneously
 - **Country Filtering**: Filter items by seller's country of origin
 - **RSS Feed**: Subscribe to your search results with any RSS reader
-- **Telegram Integration**: Receive notifications directly in Telegram
+- **Telegram Integration**: Receive notifications directly in Telegram, with photos, buy buttons, inline query management,
+  quiet hours and diagnostics
+- **Browser Session (Patchright)**: The Vinted cookies are obtained with a real Chromium browser and reused for the API
+  calls, which makes the scraping much more reliable
+- **Reliable delivery**: notifications are stored in the database and retried, so a restart never loses an item
 
 ---
 
@@ -109,8 +113,17 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 2. **Start the container**
 
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
+
+   To build the image from a local checkout (instead of using the published one) keep the provided
+   `docker-compose.override.yml` next to `docker-compose.yml` and run:
+
+   ```bash
+   VN_WEB_PORT=8010 docker compose up -d --build
+   ```
+
+   `VN_WEB_PORT` / `VN_RSS_PORT` change only the *host* ports, which is handy when 8000 or 8080 are already in use.
 
 3. **Access the Web UI**
 
@@ -143,9 +156,8 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
 3. **Initial Configuration**
 
-   The application can be configured through the Web UI after starting. However, you can also change the Web UI port in
-   the
-   `configuration_values.py` file directly.
+   The application can be configured through the Web UI after starting. The port of the Web UI itself (8000 by default)
+   is the `Web UI Port` field of the Configuration page, next to the other system settings.
 
 4. **Run the application**
 
@@ -175,16 +187,23 @@ Features available in the Web UI:
 
 After configuring your Telegram bot in the Web UI, you can use the following commands:
 
-- `/add_query query` - Add a search query to monitor
+- `/start`, `/help` - Show the available commands
+- `/add_query [name=]query` - Add a search query to monitor
 - `/remove_query query_number` - Remove a specific query
 - `/remove_query all` - Remove all queries
-- `/queries` - List all active queries
+- `/queries` - List the queries with inline buttons to pause or delete them
+- `/test url` - Run a search once and show the results without saving or notifying anything
 - `/hello` - Check if the bot is working
-- `/create_allowlist` - Create a country allowlist (will slow down processing)
-- `/delete_allowlist` - Delete the country allowlist
 - `/add_country XX` - Add a country to the allowlist (ISO3166 format)
 - `/remove_country XX` - Remove a country from the allowlist
+- `/clear_allowlist` - Allow every country again
 - `/allowlist` - View the current allowlist
+- `/banwords`, `/add_banword word`, `/remove_banword word` - Manage the excluded words
+- `/pause`, `/resume` - Stop and resume the notifications (new items stay queued)
+- `/quiet HH:MM-HH:MM` - Queue the notifications during a time window (`/quiet off` to disable it)
+- `/status` - Browser session, pending notifications and last item found
+- `/stats` - Items found per query and per day
+- `/refresh_session` - Force the Vinted browser session to be renewed
 
 ### Query Examples
 
@@ -200,6 +219,34 @@ The RSS feed provides an alternative way to receive notifications. After enablin
 at [http://localhost:8080](http://localhost:8080).
 
 ## ⚙️ Advanced Configuration
+
+### Browser Session (Patchright)
+
+The cookies of Vinted are obtained with
+[Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-python), a patched Chromium driver. The browser is only
+used by the scraper process; the resulting cookies, User-Agent and proxy are shared with the other processes through the
+database.
+
+- **essential** mode (default): the browser only produces the cookies, the API calls stay plain HTTP requests.
+- **full** mode: the API calls are performed from inside the browser context, which is slower but harder to block. It is
+  also used automatically as a fallback when the plain requests are rejected.
+
+The session is renewed every `browser_ttl` seconds and whenever a 401/403/429 is received, from the Telegram command
+`/refresh_session` or from the Configuration page.
+
+When self-building you have to download the browser once:
+
+```bash
+pip install -r requirements.txt
+patchright install chromium   # add --with-deps on a bare Linux host
+```
+
+The Docker image already contains it. Notes for containers:
+
+- The browser needs a writable profile directory (`./data/browser_profile` by default) and a writable `HOME`.
+- The sandbox is disabled by default (`browser_no_sandbox`), because it does not work in most container runtime
+  configurations: this lowers the isolation of the browser process, keep it in mind.
+- `headless=False` is more stealthy but requires an X11 server (e.g. `xvfb-run`).
 
 ### Proxy Support
 

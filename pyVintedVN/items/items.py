@@ -4,6 +4,9 @@ from urllib.parse import urlparse, parse_qsl
 from requests.exceptions import HTTPError
 from typing import List, Dict, Optional
 from pyVintedVN.settings import Urls
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class Items:
@@ -57,21 +60,40 @@ class Items:
 
         try:
             # Make the request to the Vinted API
-            response = requester.get(url=api_url, params=params)
-            response.raise_for_status()
-
-            # Parse the response
-            items = response.json()
-            items = items["items"]
-
-            # Return either Item objects or raw JSON data
-            if not json:
-                return [Item(_item) for _item in items]
-            else:
-                return items
-
+            payload = requester.get_json(url=api_url, params=params)
+            items = payload.get("items", [])
         except HTTPError as err:
-            raise err
+            # The JSON API is blocked (403) since Vinted moved the catalog to
+            # server side rendering: read the results from the page instead.
+            logger.warning(f"API request failed ({err}), reading the search page")
+            items = self.search_with_browser(url, nbr_items)
+            if not items:
+                raise err
+        except (KeyError, ValueError) as err:
+            logger.warning(f"Unexpected Vinted response: {err}")
+            return []
+
+        # Return either Item objects or raw JSON data
+        if json:
+            return items
+
+        parsed_items = [Item(_item) for _item in items]
+        return [item for item in parsed_items if item.is_valid]
+
+    def search_with_browser(self, url: str, nbr_items: int = 20) -> List[Dict]:
+        """
+        Scrape the search results from the rendered page.
+
+        Args:
+            url (str): The URL of the search on Vinted.
+            nbr_items (int, optional): Number of items to be returned.
+
+        Returns:
+            List[Dict]: Vinted-API shaped payloads, empty when unavailable
+        """
+        import browser_session
+
+        return browser_session.search_items(url, limit=nbr_items)
 
     def parse_url(
         self, url: str, nbr_items: int = 20, page: int = 1, time: Optional[int] = None

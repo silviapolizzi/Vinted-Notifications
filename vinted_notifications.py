@@ -17,10 +17,11 @@ if not os.path.exists("./data/vinted_notifications.db"):
     db.create_or_update_sqlite_db("initial_db.sql")
     logger.info("Database created successfully")
 
-import core
-from rss_feed_plugin.rss_feed import rss_feed_process
-from web_ui_plugin.web_ui import web_ui_process
-
+# Imported after the database bootstrap: these modules read the settings at
+# import time.
+import core  # noqa: E402
+from rss_feed_plugin.rss_feed import rss_feed_process  # noqa: E402
+from web_ui_plugin.web_ui import web_ui_process  # noqa: E402
 
 # Global process references
 telegram_process = None
@@ -43,6 +44,8 @@ def scraper_process(items_queue):
         seconds=current_query_refresh_delay,
         args=[items_queue],
         name="scraper",
+        max_instances=1,
+        coalesce=True,
     )
     scraper_scheduler.start()
     try:
@@ -51,6 +54,10 @@ def scraper_process(items_queue):
             time.sleep(1)
     except (KeyboardInterrupt, SystemExit):
         scraper_scheduler.shutdown()
+        # Release the browser owning process
+        import browser_session
+
+        browser_session.get_session().stop()
         logger.info("Scrape process stopped")
 
 
@@ -65,7 +72,7 @@ def item_extractor(items_queue, new_items_queue):
         logger.info("Consumer process stopped")
 
 
-def dispatcher_function(input_queue, rss_queue, telegram_queue):
+def dispatcher_function(input_queue, rss_queue):
     logger.info("Dispatcher process started")
     try:
         while True:
@@ -73,24 +80,22 @@ def dispatcher_function(input_queue, rss_queue, telegram_queue):
             item = input_queue.get()
             # Send to RSS queue
             rss_queue.put(item)
-            #
-            telegram_queue.put(item)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Dispatcher process stopped")
     except Exception as e:
         logger.error(f"Error in dispatcher process: {e}", exc_info=True)
 
 
-def telegram_bot_process(queue):
+def telegram_bot_process():
     logger.info("Telegram bot process started")
-    import asyncio
 
     try:
         # Import LeRobot
         from telegram_bot_plugin.telegram_bot import LeRobot
 
-        # The bot will run with app.run_polling() which is already in the module
-        asyncio.run(LeRobot(queue))
+        # run_polling() owns the event loop: it must not be called from a
+        # running loop (e.g. asyncio.run), otherwise it raises RuntimeError.
+        LeRobot()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Telegram bot process stopped")
     except Exception as e:
@@ -134,7 +139,7 @@ def check_refresh_delay(items_queue):
         logger.error(f"Error updating refresh delay: {e}", exc_info=True)
 
 
-def monitor_processes(items_queue, telegram_queue, rss_queue):
+def monitor_processes(items_queue, rss_queue):
     global telegram_process, rss_process
 
     # Check if the query refresh delay has changed
@@ -153,9 +158,7 @@ def monitor_processes(items_queue, telegram_queue, rss_queue):
     if telegram_should_run and not telegram_is_running:
         # Start telegram process
         logger.info("Starting telegram bot process.")
-        telegram_process = multiprocessing.Process(
-            target=telegram_bot_process, args=(telegram_queue,)
-        )
+        telegram_process = multiprocessing.Process(target=telegram_bot_process)
         telegram_process.start()
     elif not telegram_should_run and telegram_is_running:
         # Stop telegram process
@@ -202,11 +205,9 @@ if __name__ == "__main__":
     current_version = db.get_parameter("version")
     # Check if there is a file that starts with the current version in the migrations folder. We keep comparing until
     # we find no migration files that start with the current version.
-    migration_files = [f for f in os.listdir("migrations")]
+    migration_files = os.listdir("migrations")
     while True:
-        migration_file = next(
-            (f for f in migration_files if f.startswith(current_version)), None
-        )
+        migration_file = db.get_next_migration(migration_files, current_version)
         if migration_file:
             logger.info(f"Running migration: {migration_file}")
             db.create_or_update_sqlite_db("./migrations/" + migration_file)
@@ -222,7 +223,6 @@ if __name__ == "__main__":
     items_queue = multiprocessing.Queue()
     new_items_queue = multiprocessing.Queue()
     rss_queue = multiprocessing.Queue()
-    telegram_queue = multiprocessing.Queue()
 
     # 1. Create and start the scrape process
     # This process will scrape items and put them in the items_queue
@@ -246,7 +246,6 @@ if __name__ == "__main__":
         args=(
             new_items_queue,
             rss_queue,
-            telegram_queue,
         ),
     )
     dispatcher_process.start()
@@ -258,7 +257,7 @@ if __name__ == "__main__":
         monitor_processes,
         "interval",
         seconds=5,
-        args=[items_queue, telegram_queue, rss_queue],
+        args=[items_queue, rss_queue],
         name="process_monitor",
     )
     monitor_scheduler.start()
